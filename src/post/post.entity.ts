@@ -11,9 +11,9 @@ export class PostEntity {
   @Column()
   tableName: string;
 
-  @Column({default: false})
-  isWrite: boolean;
+  @Column()
+  isWritePrivate: boolean;
 
-  @Column({default: false})
-  isRead: boolean;
+  @Column()
+  isReadPrivate: boolean;
 }

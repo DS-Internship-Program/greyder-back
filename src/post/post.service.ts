@@ -54,30 +54,58 @@ const updatePost = async (name, options, id) => {
   for (let key in options) {
     sql.push(`"${key}" = '${options[key]}'`);
   }
-  await db.query(`UPDATE ${name} SET ${sql} WHERE id = ${id}`)
-}
+  await db.query(`UPDATE ${name} SET ${sql} WHERE id = ${id}`);
+};
 
 @Injectable()
 export class PostService {
   constructor(@InjectRepository(PostEntity) private postRepository: Repository<PostEntity>) {
   }
-  async createPost(body, name) {
+
+  async createPost(body, name, user) {
+    const { isWritePrivate, isReadPrivate, ...options } = body;
     if (name !== name.toLowerCase() || regex.test(name)) {
       return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
     }
     const { rows } = await db.query(`SELECT * FROM information_schema.tables WHERE table_catalog = 'post_observer' AND table_name = '${name}'`);
     if (rows.length !== 0) return "Таблица с таким именем уже есть в базе.";
-    if (body["id"] === undefined) {
-      body.id = "serial, primary key";
+    if (options["id"] === undefined) {
+      options.id = "serial, primary key";
     }
-    await create(name, body);
+    await create(name, options);
+    await this.postRepository.insert({ tableName: name, userId: user.id, isWritePrivate: !!isWritePrivate, isReadPrivate: !!isReadPrivate });
     return "Ваша таблица успесншно создана.";
   }
 
-  async addPost(name, body) {
+  async dropTable(name, user) {
     try {
-      if (name !== name.toLowerCase()) {
-        return "Название таблицы должно быть в нижнем регистре.";
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id){
+        return 'Вы не можете удалить эту таблицу.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      }
+      await db.query(`DROP TABLE ${name}`);
+      return `Таблица ${name} успешно удалена.`;
+    } catch (e) {
+      return `У вас нет такой таблицы.`;
+    }
+
+  }
+
+  async addPost(name, body, user) {
+    try {
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id && access[0].isWritePrivate){
+        return 'Вы не можете добавить пост в эту таблицу.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
       }
       await add(name, body);
       return "Ваш пост успесншно создан.";
@@ -86,8 +114,17 @@ export class PostService {
     }
   }
 
-  async getPosts(name, query) {
+  async getPosts(name, query, user) {
     try {
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id && access[0].isReadPrivate){
+        return 'Вы не можете прочитать посты в этой таблице.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      }
       const { limit, page } = query;
       const { rows } = limit && page ? await db.query(`SELECT * FROM "${name}" LIMIT ${limit} OFFSET ${(page - 1) * limit}`) : await db.query(`SELECT * FROM "${name}" LIMIT 1000`);
       return rows;
@@ -97,27 +134,54 @@ export class PostService {
 
   }
 
-  async deletePost(name, id) {
+  async deletePost(name, id, user) {
     try {
-      deletePost(name, id);
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id && access[0].isReadPrivate){
+        return 'Вы не можете удалять посты в этой таблице.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      }
+      await deletePost(name, id);
       return "Пост успешно удалён";
     } catch (e) {
       return "Что то пошло не так";
     }
   }
 
-  async updatePost(name, options, id) {
+  async updatePost(name, options, id, user) {
     try {
-      await updatePost(name, options, id)
-      return 'Пост успешно обновлён.'
-    }catch (e){
-      return e.routine === "transformUpdateTargetList" ? "Столбца с таким именем не существует." : "Введите данные правильного типа."
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id && access[0].isReadPrivate){
+        return 'Вы не можете обновлять посты в этой таблице.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      }
+      await updatePost(name, options, id);
+      return "Пост успешно обновлён.";
+    } catch (e) {
+      return e.routine === "transformUpdateTargetList" ? "Столбца с таким именем не существует." : "Введите данные правильного типа.";
     }
 
   }
 
-  async addColumn(name, options) {
+  async addColumn(name, options, user) {
     try {
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id){
+        return 'Вы не можете обновлять эту таблицу.'
+      }
+      if (name !== name.toLowerCase() || regex.test(name)) {
+        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      }
       await addColumn(name, options);
       return "Новый столбец успешно добавлен.";
     } catch (e) {
@@ -125,12 +189,21 @@ export class PostService {
     }
   }
 
-  async removeColumn(name, column) {
+  async removeColumn(name, column, user) {
     try {
-      await removeColumn(name, column)
-      return 'Столюец успешно удалён.'
+      const access = await this.postRepository.find({ where: { tableName: name} });
+      if (access[0].tableName === undefined) return 'Такой таблицы в базе нет.'
+
+      if(access[0].userId !== user.id && access[0].isReadPrivate){
+        return 'Вы не можете обновлять эту таблицу.'
+      }
+      if (name !== name.toLowerCase()) {
+        return "Название таблицы должно быть в нижнем регистре.";
+      }
+      await removeColumn(name, column);
+      return "Столюец успешно удалён.";
     } catch (e) {
-      return 'Столбца с таким названием не существует.'
+      return "Столбца с таким названием не существует.";
     }
 
   }
