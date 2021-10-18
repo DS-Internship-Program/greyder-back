@@ -5,16 +5,20 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserEntity } from "./user/user.entity";
 import { PostModule } from './post/post.module';
 import { PostEntity } from "./post/post.entity";
+import { ConfigModule } from "@nestjs/config";
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      envFilePath: '.env'
+    }),
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: '192.168.0.250',
+      host: process.env.DB_HOST,
       port: 5432,
-      username: 'camp',
-      password: 'camp20',
-      database: 'post_observer',
+      username: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
       entities: [UserEntity, PostEntity],
       synchronize: true,
       autoLoadEntities: true,
