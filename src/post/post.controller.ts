@@ -10,51 +10,51 @@ export class PostController {
   constructor(private postService: PostService) {
   }
 
-  @ApiOperation({summary: 'Создание таблицы.'})
+  @ApiOperation({summary: 'Создание таблицы.', description: 'Таблица саздаётся на основе данных отправленных с клиента. При создании испольховать латиницу и типы данных свойственных для Postgres(varchar, text, integer, null, not null, serial, boolean)'})
   @Post("/:name/init")
   create(@Body() body, @Param("name") name, @Request() req) {
     return this.postService.createPost(body, name, req.user);
   }
 
-  @ApiOperation({summary: 'Удаление таблицы.'})
+  @ApiOperation({summary: 'Удаление таблицы.', description: 'Удаление таблицы происходит по параметру названия.'})
   @Delete("/:name/table")
   dropTable(@Param("name") name, @Request() req) {
     return this.postService.dropTable(name, req.user);
   }
 
-  @ApiOperation({summary: 'Добавление колонки в таблицу.'})
+  @ApiOperation({summary: 'Добавление колонки в таблицу.', description: 'Создание таблицы по параметру имени и опций в body'})
   @Post('/:name/column')
   addColumn(@Body() options, @Param('name') name, @Request() req){
     return this.postService.addColumn(name, options, req.user)
   }
 
-  @ApiOperation({summary: 'Удаление колонки из таблицы.'})
+  @ApiOperation({summary: 'Удаление колонки из таблицы.', description: 'Удаление колонки по названию таблицы в параметрах и названию столбца в body'})
   @Delete("/:name/column")
   removeColumn(@Param("name") name, @Body("column") column, @Request() req) {
     return this.postService.removeColumn(name, column, req.user);
   }
 
-  @ApiOperation({summary: 'Добавление поста в таблицу.'})
+  @ApiOperation({summary: 'Добавление поста в таблицу.', description: 'Пост добавлятся по названию таблицы в параметрах и на основе body. ВАЖНО, ключи должны совпадать.'})
   @Post("/:name")
   add(@Body() body, @Param("name") name, @Request() req) {
     return this.postService.addPost(name, body, req.user);
   }
 
-  @ApiOperation({summary: 'Получение постов в таблице.'})
+  @ApiOperation({summary: 'Получение постов в таблице.', description: 'Получение постов в таблице по названию таблицы в параметрах.'})
   @Get("/:name")
   get(@Param("name") name, @Query() query, @Request() req) {
     return this.postService.getPosts(name, query, req.user);
   }
 
-  @ApiOperation({summary: 'Обновленеие поста в таблице.'})
+  @ApiOperation({summary: 'Обновленеие поста в таблице.', description: 'Обновление поста в таблице по названию таблицы и id поста в параметрах.'})
   @Put("/:name/:id")
   update(@Body() body, @Param("name") name, @Param("id") id, @Request() req) {
     return this.postService.updatePost(name, body, id, req.user);
   }
 
-  @ApiOperation({summary: 'Удаление поста из таблицы.'})
-  @Delete("/:name")
-  delete(@Param("name") name, @Query("id") id, @Request() req) {
+  @ApiOperation({summary: 'Удаление поста из таблицы.', description: 'Удаление поста в таблице по названию таблицы и id поста в параметрах.'})
+  @Delete("/:name/:id")
+  delete(@Param("name") name, @Param("id") id, @Request() req) {
     return this.postService.deletePost(name, id, req.user);
   }
 }

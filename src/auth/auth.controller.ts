@@ -9,6 +9,7 @@ export class AuthController {
 
   constructor(private authService: AuthService) {}
   @ApiOperation({summary: 'Логин'})
+  @ApiBody({type: CreateUserDto})
   @Post('/login')
   login(@Body() userDto: CreateUserDto) {
     return this.authService.login(userDto)
