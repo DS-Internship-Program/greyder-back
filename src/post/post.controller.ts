@@ -10,6 +10,11 @@ export class PostController {
   constructor(private postService: PostService) {
   }
 
+  @ApiOperation({summary: 'Получение таблиц.', description: 'Получение таблиц пользователя.'})
+  @Get()
+  getPost(@Request() req){
+    return this.postService.getPost(req.user)
+  }
   @ApiOperation({summary: 'Создание таблицы.', description: 'Таблица саздаётся на основе данных отправленных с клиента. При создании испольховать латиницу и типы данных свойственных для Postgres(varchar, text, integer, null, not null, serial, boolean)'})
   @Post("/:name/init")
   create(@Body() body, @Param("name") name, @Request() req) {
@@ -56,5 +61,10 @@ export class PostController {
   @Delete("/:name/:id")
   delete(@Param("name") name, @Param("id") id, @Request() req) {
     return this.postService.deletePost(name, id, req.user);
+  }
+  @ApiOperation({summary: 'Получение схемы таблицы.', description: 'Получение схемы таблицы по имени в параметрах.'})
+  @Get("/:name/schema")
+  getSchema(@Param("name") name, @Request() req) {
+    return this.postService.getSchema(name, req.user);
   }
 }
