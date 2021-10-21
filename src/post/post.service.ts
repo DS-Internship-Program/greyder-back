@@ -1,9 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { Pool } from "pg";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { PostEntity } from "./post.entity";
-import { log } from "util";
 
 const regex = new RegExp(/[ !+/*-]/);
 
@@ -64,21 +63,19 @@ export class PostService {
   }
 
   async getPost(user) {
-    return this.postRepository.find({
-      where:
-        {
-          userId: user.id
-        }
-    });
+    return this.postRepository.find({ where: { userId: user.id } });
   }
 
   async createPost(body, name, user) {
     const { isWritePrivate, isReadPrivate, ...options } = body;
     if (name !== name.toLowerCase() || regex.test(name)) {
-      return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
+      throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+
     }
     const { rows } = await db.query(`SELECT * FROM information_schema.tables WHERE table_catalog = 'post_observer' AND table_name = '${name}'`);
-    if (rows.length !== 0) return "Таблица с таким именем уже есть в базе.";
+    if (rows.length !== 0) {
+      throw new HttpException("Таблица с таким именем уже есть в базе.", HttpStatus.BAD_REQUEST);
+    }
     if (options["id"] === undefined) {
       options.id = "serial, primary key";
     }
@@ -94,20 +91,15 @@ export class PostService {
 
   async dropTable(name, user) {
     try {
-      const access = await this.postRepository.find({ where: { tableName: name , userId: user.id} });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id) {
-        return "Вы не можете удалить эту таблицу.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
-      await this.postRepository.remove(access)
+      const access = await this.postRepository.find({ where: { tableName: name, userId: user.id } });
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id) throw new HttpException("Вы не можете удалить эту таблицу.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      await this.postRepository.remove(access);
       await db.query(`DROP TABLE ${name}`);
       return `Таблица ${name} успешно удалена.`;
     } catch (e) {
-      return `У вас нет такой таблицы.`;
+      throw new HttpException("У вас нет такой такблицы", HttpStatus.FORBIDDEN);
     }
 
   }
@@ -115,37 +107,27 @@ export class PostService {
   async addPost(name, body, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isWritePrivate) {
-        return "Вы не можете добавить пост в эту таблицу.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isWritePrivate) throw new HttpException("Вы не можете добавить пост в эту таблицу.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
       await add(name, body);
-      return "Ваш пост успесншно создан.";
+      return { message: "Ваш пост успесншно создан." };
     } catch (e) {
-      return "Что-то пошло не так. Перепроверьте данные.";
+      throw new HttpException("Что-то пошло не так. Перепроверьте даннные.", HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async getPosts(name, query, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isReadPrivate) {
-        return "Вы не можете прочитать посты в этой таблице.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isReadPrivate) throw new HttpException("Вы не можете прочитать посты в этой таблице.", HttpStatus.BAD_REQUEST);
       const { limit, page } = query;
       const { rows } = limit && page ? await db.query(`SELECT * FROM "${name}" LIMIT ${limit} OFFSET ${(page - 1) * limit}`) : await db.query(`SELECT * FROM "${name}" LIMIT 1000`);
       return rows;
     } catch (e) {
-      return "Что-то пошло не так. Перепроверьте данные.";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
   }
@@ -153,36 +135,26 @@ export class PostService {
   async deletePost(name, id, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isReadPrivate) {
-        return "Вы не можете удалять посты в этой таблице.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isReadPrivate) throw new HttpException("Вы не можете удалять посты в этой таблице.", HttpStatus.BAD_REQUEST);
       await deletePost(name, id);
-      return "Пост успешно удалён";
+      return { message: "Пост успешно удалён" };
     } catch (e) {
-      return "Что то пошло не так";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async updatePost(name, options, id, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isReadPrivate) {
-        return "Вы не можете обновлять посты в этой таблице.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isReadPrivate) throw new HttpException("Вы не можете обновлять посты в этой таблице.", HttpStatus.BAD_REQUEST);
       await updatePost(name, options, id);
-      return "Пост успешно обновлён.";
+      return { message: "Пост успешно обновлён." };
     } catch (e) {
-      return e.routine === "transformUpdateTargetList" ? "Столбца с таким именем не существует." : "Введите данные правильного типа.";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
   }
@@ -190,36 +162,26 @@ export class PostService {
   async addColumn(name, options, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id) {
-        return "Вы не можете обновлять эту таблицу.";
-      }
-      if (name !== name.toLowerCase() || regex.test(name)) {
-        return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id) throw new HttpException("Вы не можете обновлять эту таблицу", HttpStatus.BAD_REQUEST);
       await addColumn(name, options);
       return "Новый столбец успешно добавлен.";
     } catch (e) {
-      return e.routine === "typenameType" ? "Перепроверьте данные." : "Столбец с таким названием уже существует";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   async removeColumn(name, column, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isReadPrivate) {
-        return "Вы не можете обновлять эту таблицу.";
-      }
-      if (name !== name.toLowerCase()) {
-        return "Название таблицы должно быть в нижнем регистре.";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isReadPrivate) throw new HttpException("Вы не можете обновлять эту таблицу", HttpStatus.BAD_REQUEST);
       await removeColumn(name, column);
-      return "Столюец успешно удалён.";
+      return { message: "Столбец успешно удалён." };
     } catch (e) {
-      return "Столбца с таким названием не существует.";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
   }
@@ -227,18 +189,13 @@ export class PostService {
   async getSchema(name, user) {
     try {
       const access = await this.postRepository.find({ where: { tableName: name } });
-      if (!access[0]?.tableName) return "Такой таблицы в базе нет.";
-
-      if (access[0].userId !== user.id && access[0].isWritePrivate) {
-        return "У вас нет ддоступа к этой таблице.";
-      }
-      if (name !== name.toLowerCase()) {
-        return "Название таблицы должно быть в нижнем регистре.";
-      }
+      if (access[0]?.tableName === undefined) throw new HttpException("Такой таблицы в базе нет.", HttpStatus.BAD_REQUEST);
+      if (name !== name.toLowerCase() || regex.test(name)) throw new HttpException("Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .", HttpStatus.BAD_REQUEST);
+      if (access[0].userId !== user.id && access[0].isWritePrivate) throw new HttpException("У вас нет ддоступа к этой таблице.", HttpStatus.BAD_REQUEST);
       const { rows } = await db.query(`SELECT "column_name", "data_type" FROM information_schema.columns WHERE table_name='${name}'`);
       return rows;
     } catch (e) {
-      return "Что-то пошло не так, поробуйте еще раз.";
+      throw new HttpException(e.toString(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
   }

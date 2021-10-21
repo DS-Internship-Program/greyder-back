@@ -22,10 +22,6 @@ export class PostController {
   })
   @Post("/:name/init")
   create(@Body() body, @Param("name") name, @Request() req) {
-    if (body
-      && Object.keys(body).length === 0
-      && Object.getPrototypeOf(body) === Object.prototype)
-      return 'Запрос не может быть пустым. В теле запроса отсутвуют параметры.'
       return this.postService.createPost(body, name, req.user);
   }
 
