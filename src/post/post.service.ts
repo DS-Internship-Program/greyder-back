@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { PostEntity } from "./post.entity";
+import { log } from "util";
 
 const regex = new RegExp(/[ !+/*-]/);
 
@@ -93,7 +94,7 @@ export class PostService {
 
   async dropTable(name, user) {
     try {
-      const access = await this.postRepository.find({ where: { tableName: name } });
+      const access = await this.postRepository.find({ where: { tableName: name , userId: user.id} });
       if (access[0]?.tableName === undefined) return "Такой таблицы в базе нет.";
 
       if (access[0].userId !== user.id) {
@@ -102,6 +103,7 @@ export class PostService {
       if (name !== name.toLowerCase() || regex.test(name)) {
         return "Название таблицы должно быть в нижнем регистре и не должно содержать символы пробела и * - .";
       }
+      await this.postRepository.remove(access)
       await db.query(`DROP TABLE ${name}`);
       return `Таблица ${name} успешно удалена.`;
     } catch (e) {
